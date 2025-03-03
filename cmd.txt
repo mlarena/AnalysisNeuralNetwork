@@ -1,1 +1,7 @@
-1234
+﻿dotnet ef migrations add AddRoadFields
+dotnet ef database update
+
+truncate table public."DetectedObjects"
+truncate table public."SummaryData"
+
+dotnet new blazorserver -n AnalysisNeuralNetwork

@@ -1,0 +1,301 @@
+﻿@page "/"
+@using System.Text.Json
+@using System.ComponentModel.DataAnnotations
+
+@using Microsoft.AspNetCore.Components.Forms
+@inject IWebHostEnvironment Environment
+@inject HttpClient Http
+
+<h3 class="mt-4">Загрузка файлов</h3>
+
+<EditForm Model="@model" OnValidSubmit="@HandleValidSubmit" class="mt-3">
+    <DataAnnotationsValidator />
+    <ValidationSummary />
+
+    <div class="form-group">
+        <label>Наименование дороги: <span class="text-danger">*</span></label>
+        <InputText @bind-Value="model.RoadName" class="form-control" />
+        <ValidationMessage For="() => model.RoadName" />
+    </div>
+
+    <div class="form-group">
+        <label>Участок дороги: <span class="text-danger">*</span></label>
+        <InputText @bind-Value="model.SectionOfRoad" class="form-control" />
+        <ValidationMessage For="() => model.SectionOfRoad" />
+    </div>
+
+    <div class="form-group">
+        <label>Класс автомобильной дороги: <span class="text-danger">*</span></label>
+        <InputSelect @bind-Value="model.RoadClass" class="form-control">
+            <option value="">Выберите класс</option>
+            <option value="Автомагистраль">Автомагистраль</option>
+            <option value="Скоростная автомобильная дорога">Скоростная автомобильная дорога</option>
+            <option value="Обычная автомобильная дорога">Обычная автомобильная дорога</option>
+        </InputSelect>
+        <ValidationMessage For="() => model.RoadClass" />
+    </div>
+
+    <div class="form-group">
+        <label>Категория автомобильной дороги: <span class="text-danger">*</span></label>
+        <InputSelect @bind-Value="model.RoadCategory" class="form-control">
+            <option value="">Выберите категорию</option>
+            <option value="IА Общее число полос движения 4 и более">IА Общее число полос движения 4 и более</option>
+            <option value="IБ Общее число полос движения 4 и более">IБ Общее число полос движения 4 и более</option>
+            <option value="IВ Общее число полос движения 4 и более">IВ Общее число полос движения 4 и более</option>
+            <option value="II Общее число полос движения 2">II Общее число полос движения 2</option>
+            <option value="III Общее число полос движения 2">III Общее число полос движения 2</option>
+            <option value="IV Общее число полос движения 2">IV Общее число полос движения 2</option>
+            <option value="V Общее число полос движения 1">V Общее число полос движения 1</option>
+        </InputSelect>
+        <ValidationMessage For="() => model.RoadCategory" />
+    </div>
+
+    <div class="form-group">
+        <label>Подрядная организация: <span class="text-danger">*</span></label>
+        <InputText @bind-Value="model.Contractor" class="form-control" />
+        <ValidationMessage For="() => model.Contractor" />
+    </div>
+
+    <table class="table mt-3">
+        <tbody>
+            <tr>
+                <td>
+                    <div class="form-group">
+                        <label>Загрузка видео файла: <span class="text-danger">*</span></label>
+                        <br />
+                        <InputFile OnChange="@HandleVideoUpload" accept="video/*" class="form-control-file" />
+                        <ValidationMessage For="() => model.VideoFilePath" />
+                    </div>
+                </td>
+                <td>
+                    <div class="form-group">
+                        <label>Загрузка текстового файла (CSV): <span class="text-danger">*</span></label>
+                        <br />
+                        <InputFile OnChange="@HandleTextUpload" accept=".csv" class="form-control-file" />
+                        <ValidationMessage For="() => model.TextFilePath" />
+                    </div>
+                </td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h4 class="mt-3">Уровни критичности классов</h4>
+    <div class="row">
+        @foreach (var className in model.CriticalLevels.Keys)
+        {
+            <div class="col-md-4 mb-2">
+                <label>@className:</label>
+                <InputNumber @bind-Value="model.CriticalLevels[className]" min="1" max="3" class="form-control" />
+            </div>
+        }
+    </div>
+
+    <button type="submit" class="btn btn-primary mt-3" disabled="@isLoading">Вызов Python скрипта</button>
+</EditForm>
+
+@if (isLoading)
+{
+    <div class="mt-3">
+        <div class="progress">
+            <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 100%">
+                Выполняется...
+            </div>
+        </div>
+    </div>
+}
+
+@if (result != null)
+{
+    <div class="mt-3">
+        <h4>Результат:</h4>
+        <div class="card">
+            <div class="card-body">
+                @if (result.Status == "error")
+                {
+                    <p class="text-danger"><strong>Ошибка:</strong> @result.Error</p>
+                }
+                else
+                {
+                    <p><strong>Название видео:</strong> @result.VideoName</p>
+                    <p><strong>Наименование дороги:</strong> @result.RoadName</p>
+                    <p><strong>Участок дороги:</strong> @result.SectionOfRoad</p>
+                    <p><strong>Общее количество объектов:</strong> @result.TotalObjects</p>
+                    <p><strong>Общая дистанция:</strong> @result.TotalDistance м</p>
+                    <p><strong>Время обработки:</strong> @result.ProcessingTime</p>
+                    <h5>Количество классов:</h5>
+                    <ul>
+                        @foreach (var item in result.ClassCounts)
+                        {
+                            <li>@item.Key: @item.Value</li>
+                        }
+                    </ul>
+                }
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private Model model = new Model();
+    private Result result;
+    private bool isLoading;
+    private long maxFileSize = 2L * 1024L * 1024L * 1024L; // 2 GB
+
+    private readonly JsonSerializerOptions jsonOptions = new JsonSerializerOptions
+        {
+            Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+            WriteIndented = true
+        };
+
+    private async Task HandleVideoUpload(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file == null)
+        {
+            model.VideoFilePath = null;
+            return;
+        }
+
+        var path = Path.Combine(Environment.ContentRootPath, "NeuralNetwork", "VIDEO_FOLGER", file.Name);
+        try
+        {
+            await using var fileStream = new FileStream(path, FileMode.Create);
+            await file.OpenReadStream(maxFileSize).CopyToAsync(fileStream);
+            model.VideoFilePath = path;
+        }
+        catch (Exception ex)
+        {
+            result = new Result { Status = "error", Error = $"Ошибка загрузки видео: {ex.Message}" };
+        }
+    }
+
+    private async Task HandleTextUpload(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file == null)
+        {
+            model.TextFilePath = null;
+            return;
+        }
+
+        var path = Path.Combine(Environment.ContentRootPath, "NeuralNetwork", "TXT_FOLDER", file.Name);
+        try
+        {
+            await using var fileStream = new FileStream(path, FileMode.Create);
+            await file.OpenReadStream(maxFileSize).CopyToAsync(fileStream);
+            model.TextFilePath = path;
+        }
+        catch (Exception ex)
+        {
+            result = new Result { Status = "error", Error = $"Ошибка загрузки CSV: {ex.Message}" };
+        }
+    }
+
+    private async Task HandleValidSubmit()
+    {
+        isLoading = true;
+        result = null;
+        StateHasChanged();
+
+        var request = new PythonScriptRequest
+            {
+                RoadName = model.RoadName,
+                SectionOfRoad = model.SectionOfRoad,
+                RoadClass = model.RoadClass,
+                RoadCategory = model.RoadCategory,
+                Contractor = model.Contractor,
+                VideoFilePath = model.VideoFilePath,
+                TextFilePath = model.TextFilePath,
+                CriticalLevels = JsonSerializer.Serialize(model.CriticalLevels, jsonOptions)
+            };
+
+        Console.WriteLine($"Отправка запроса: {JsonSerializer.Serialize(request, jsonOptions)}");
+
+        try
+        {
+            var response = await Http.PostAsJsonAsync("api/python/run", request, jsonOptions);
+            var responseContent = await response.Content.ReadAsStringAsync();
+            Console.WriteLine($"Ответ сервера: {responseContent}");
+
+            if (response.IsSuccessStatusCode)
+            {
+                result = JsonSerializer.Deserialize<Result>(responseContent, jsonOptions);
+            }
+            else
+            {
+                var errorResult = JsonSerializer.Deserialize<ErrorResult>(responseContent, jsonOptions);
+                result = new Result { Status = errorResult.Status, Error = errorResult.Error };
+            }
+        }
+        catch (Exception ex)
+        {
+            result = new Result { Status = "error", Error = $"Ошибка запроса: {ex.Message}" };
+        }
+
+        isLoading = false;
+        StateHasChanged();
+    }
+
+    public class Model
+    {
+        [Required(ErrorMessage = "Наименование дороги обязательно для заполнения.")]
+        public string RoadName { get; set; }
+
+        [Required(ErrorMessage = "Участок дороги обязателен для заполнения.")]
+        public string SectionOfRoad { get; set; }
+
+        [Required(ErrorMessage = "Класс автомобильной дороги обязателен для выбора.")]
+        public string RoadClass { get; set; }
+
+        [Required(ErrorMessage = "Категория автомобильной дороги обязательна для выбора.")]
+        public string RoadCategory { get; set; }
+
+        [Required(ErrorMessage = "Подрядная организация обязательна для заполнения.")]
+        public string Contractor { get; set; }
+
+        [Required(ErrorMessage = "Загрузка видео файла обязательна.")]
+        public string VideoFilePath { get; set; }
+
+        [Required(ErrorMessage = "Загрузка CSV файла обязательна.")]
+        public string TextFilePath { get; set; }
+
+        public Dictionary<string, int> CriticalLevels { get; set; } = new Dictionary<string, int>
+        {
+            {"Плохой сад", 1}, {"Загрязнение опоры", 1}, {"Стертая разметка", 1},
+            {"Повреждение опоры", 2}, {"Сломанный бордюр", 2}, {"Грязная остановка", 1},
+            {"Трещина", 2}, {"Граффити", 1}, {"Выбоина", 3},
+            {"Излишки мусора", 2}, {"Заплатка", 2}, {"Малая яма", 3}
+        };
+    }
+
+    public class PythonScriptRequest
+    {
+        public string RoadName { get; set; }
+        public string SectionOfRoad { get; set; }
+        public string RoadClass { get; set; }
+        public string RoadCategory { get; set; }
+        public string Contractor { get; set; }
+        public string VideoFilePath { get; set; }
+        public string TextFilePath { get; set; }
+        public string CriticalLevels { get; set; }
+    }
+
+    public class Result
+    {
+        public string VideoName { get; set; }
+        public string RoadName { get; set; }
+        public string SectionOfRoad { get; set; }
+        public Dictionary<string, int> ClassCounts { get; set; }
+        public int TotalObjects { get; set; }
+        public double TotalDistance { get; set; }
+        public string ProcessingTime { get; set; }
+        public string Status { get; set; } = "success";
+        public string Error { get; set; }
+    }
+
+    public class ErrorResult
+    {
+        public string Status { get; set; }
+        public string Error { get; set; }
+    }
+}

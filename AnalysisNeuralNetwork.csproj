@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="NeuralNetwork\VIDEO_FOLDER\**" />
+    <Content Remove="NeuralNetwork\VIDEO_FOLDER\**" />
+    <EmbeddedResource Remove="NeuralNetwork\VIDEO_FOLDER\**" />
+    <None Remove="NeuralNetwork\VIDEO_FOLDER\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Migrations\" />
+    <Folder Include="NeuralNetwork\LOGS\" />
+    <Folder Include="NeuralNetwork\RESULT_IMAGE\" />
+    <Folder Include="NeuralNetwork\RESULT_VIDEO\" />
+    <Folder Include="NeuralNetwork\VIDEO_FOLGER\" />
+    <Folder Include="NeuralNetwork\TXT_FOLDER\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.0">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.3" />
+  </ItemGroup>
+
+</Project>

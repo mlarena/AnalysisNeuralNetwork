@@ -1,0 +1,95 @@
+﻿@page "/summarydata"
+@using AnalysisNeuralNetwork.Data
+@using Microsoft.EntityFrameworkCore
+@using System.Text.Json
+@inject ApplicationDbContext DbContext
+
+<h3>История обработки файлов</h3>
+
+@if (summaries == null)
+{
+    <p>Загрузка...</p>
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Название видео</th>
+                <th>Наименование дороги</th>
+                <th>Участок дороги</th>
+                <th>Класс дороги</th>
+                <th>Категория дороги</th>
+                <th>Подрядчик</th>
+                <th>Дата создания</th>
+                <th>Дата обработки</th>
+                <th>Статус</th>
+                <th>Действие</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var item in summaries)
+            {
+                <tr>
+                    <td>@item.VideoName</td>
+                    <td>@item.RoadName</td>
+                    <td>@item.SectionOfRoad</td>
+                    <td>@item.RoadClass</td>
+                    <td>@item.RoadCategory</td>
+                    <td>@item.Contractor</td>
+                    <td>@item.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss")</td>
+                    <td>@(item.ProcessedAt?.ToString("yyyy-MM-dd HH:mm:ss") ?? "Не обработано")</td>
+                    <td>@(item.IsProcessed ? "Обработано" : "Не обработано")</td>
+                    <td>
+                        @if (!item.IsProcessed)
+                        {
+                            <button class="btn btn-primary" @onclick="() => ProcessJson(item.Id)">Обработать JSON</button>
+                        }
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private List<AnalysisNeuralNetwork.Data.SummaryData> summaries;
+    private readonly JsonSerializerOptions jsonOptions = new JsonSerializerOptions
+        {
+            Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+            WriteIndented = true
+        };
+
+    protected override async Task OnInitializedAsync()
+    {
+        summaries = await DbContext.SummaryData.ToListAsync();
+    }
+
+    private async Task ProcessJson(int id)
+    {
+        var summary = await DbContext.SummaryData.FindAsync(id);
+        if (summary == null || summary.IsProcessed)
+        {
+            return;
+        }
+
+        var jsonPath = Path.Combine(Directory.GetCurrentDirectory(), "NeuralNetwork", "RESULT_JSON", $"{Path.GetFileNameWithoutExtension(summary.VideoName)}.json");
+        if (!File.Exists(jsonPath))
+        {
+            summaries = await DbContext.SummaryData.ToListAsync();
+            StateHasChanged();
+            return;
+        }
+
+        var jsonContent = await File.ReadAllTextAsync(jsonPath);
+        var detectedObjects = JsonSerializer.Deserialize<List<DetectedObject>>(jsonContent, jsonOptions);
+
+        DbContext.DetectedObjects.AddRange(detectedObjects);
+        summary.ProcessedAt = DateTime.UtcNow;
+        summary.IsProcessed = true;
+        await DbContext.SaveChangesAsync();
+
+        summaries = await DbContext.SummaryData.ToListAsync();
+        StateHasChanged();
+    }
+}

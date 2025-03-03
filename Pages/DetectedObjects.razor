@@ -1,0 +1,229 @@
+﻿@page "/detectedobjects"
+@using AnalysisNeuralNetwork.Data
+@using Microsoft.EntityFrameworkCore
+@inject ApplicationDbContext DbContext
+@implements IDisposable
+
+<h3>Найденные объекты</h3>
+
+<div class="row mb-3">
+    <div class="col-md-4">
+        <label>Наименование дороги:</label>
+        <select class="form-control" value="@selectedTitle" @onchange="@(e => { selectedTitle = e.Value.ToString(); ApplyFilters(); })">
+            <option value="">Все</option>
+            @if (titleOptions != null)
+            {
+                @foreach (var title in titleOptions)
+                {
+                    <option value="@title">@title</option>
+                }
+            }
+        </select>
+    </div>
+    <div class="col-md-4">
+        <label>Участок дороги:</label>
+        <select class="form-control" value="@selectedSectionOfRoad" @onchange="@(e => { selectedSectionOfRoad = e.Value.ToString(); ApplyFilters(); })">
+            <option value="">Все</option>
+            @if (sectionOptions != null)
+            {
+                @foreach (var sectionItem in sectionOptions)
+                {
+                    <option value="@sectionItem">@sectionItem</option>
+                }
+            }
+        </select>
+    </div>
+    <div class="col-md-4">
+        <label>Имя видео:</label>
+        <select class="form-control" value="@selectedVideoName" @onchange="@(e => { selectedVideoName = e.Value.ToString(); ApplyFilters(); })">
+            <option value="">Все</option>
+            @if (videoOptions != null)
+            {
+                @foreach (var video in videoOptions)
+                {
+                    <option value="@video">@video</option>
+                }
+            }
+        </select>
+    </div>
+</div>
+
+@if (filteredObjects == null)
+{
+    <p>Загрузка...</p>
+}
+else if (!filteredObjects.Any())
+{
+    <p>Нет данных для отображения.</p>
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Название</th>
+                <th>Участок дороги</th>
+                <th>Изображение</th>
+                <th>Имя видео</th>
+                <th>Класс</th>
+                <th>Широта</th>
+                <th>Долгота</th>
+                <th>Статус</th>
+                <th>Уровень критичности</th>
+                <th>Класс дороги</th>
+                <th>Категория дороги</th>
+                <th>Подрядчик</th>
+                <th>Дата обнаружения</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var item in filteredObjects)
+            {
+                <tr>
+                    <td>@item.Title</td>
+                    <td>@item.SectionOfRoad</td>
+                    <td>
+                        <img src="@GetImagePath(item)" alt="@item.ImageName" style="width: 50px; height: 50px; object-fit: cover; cursor: pointer;" @onclick="() => ShowModal(item)" />
+                    </td>
+                    <td>@item.VideoName</td>
+                    <td>@item.ClassName</td>
+                    <td>@item.Latitude</td>
+                    <td>@item.Longitude</td>
+                    <td>@item.Status</td>
+                    <td>@item.CriticalLevel</td>
+                    <td>@item.RoadClass</td>
+                    <td>@item.RoadCategory</td>
+                    <td>@item.Contractor</td>
+                    <td>@item.DateTimeDetection.ToString("yyyy-MM-dd HH:mm:ss")</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@if (showModal && selectedObject != null)
+{
+    <div class="modal" style="display: block; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000;">
+        <div class="modal-content" style="background: white; margin: 20px auto 0 auto; padding: 20px; width: 50%; max-width: 600px; border-radius: 5px;">
+            <div class="modal-header">
+                <h5>Информация об объекте</h5>
+                <button class="btn btn-secondary" @onclick="CloseModal">Закрыть</button>
+            </div>
+            <div class="modal-body">
+                <p><strong>Имя файла:</strong> @selectedObject.ImageName</p>
+                <img src="@GetImagePath(selectedObject)" alt="@selectedObject.ImageName" style="width: 100%; max-height: 400px; object-fit: contain;" />
+                <p><strong>Название:</strong> @selectedObject.Title</p>
+                <p><strong>Участок дороги:</strong> @selectedObject.SectionOfRoad</p>
+                <p><strong>Класс:</strong> @selectedObject.ClassName</p>
+                <p><strong>Широта:</strong> @selectedObject.Latitude</p>
+                <p><strong>Долгота:</strong> @selectedObject.Longitude</p>
+                <p><strong>Уровень критичности:</strong> @selectedObject.CriticalLevel</p>
+                <p><strong>Класс дороги:</strong> @selectedObject.RoadClass</p>
+                <p><strong>Категория дороги:</strong> @selectedObject.RoadCategory</p>
+                <p><strong>Подрядчик:</strong> @selectedObject.Contractor</p>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<DetectedObject> objects = new List<DetectedObject>();
+    private List<DetectedObject> filteredObjects = new List<DetectedObject>();
+    private List<string> titleOptions = new List<string>();
+    private List<string> sectionOptions = new List<string>();
+    private List<string> videoOptions = new List<string>();
+
+    private string selectedTitle = "";
+    private string selectedSectionOfRoad = "";
+    private string selectedVideoName = "";
+
+    private bool showModal = false;
+    private DetectedObject selectedObject;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            objects = await DbContext.DetectedObjects.ToListAsync();
+
+            if (objects != null && objects.Any())
+            {
+                titleOptions = objects
+                    .Select(o => o.Title)
+                    .Where(t => !string.IsNullOrEmpty(t))
+                    .Distinct()
+                    .OrderBy(t => t)
+                    .ToList();
+                sectionOptions = objects
+                    .Select(o => o.SectionOfRoad)
+                    .Where(s => !string.IsNullOrEmpty(s))
+                    .Distinct()
+                    .OrderBy(s => s)
+                    .ToList();
+                videoOptions = objects
+                    .Select(o => o.VideoName)
+                    .Where(v => !string.IsNullOrEmpty(v))
+                    .Distinct()
+                    .OrderBy(v => v)
+                    .ToList();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Ошибка загрузки данных: {ex.Message}");
+            objects = new List<DetectedObject>();
+        }
+
+        ApplyFilters();
+    }
+
+    private void ApplyFilters()
+    {
+        filteredObjects = objects ?? new List<DetectedObject>();
+
+        if (!string.IsNullOrEmpty(selectedTitle))
+        {
+            filteredObjects = filteredObjects.Where(o => o.Title == selectedTitle).ToList();
+        }
+        if (!string.IsNullOrEmpty(selectedSectionOfRoad))
+        {
+            filteredObjects = filteredObjects.Where(o => o.SectionOfRoad == selectedSectionOfRoad).ToList();
+        }
+        if (!string.IsNullOrEmpty(selectedVideoName))
+        {
+            filteredObjects = filteredObjects.Where(o => o.VideoName == selectedVideoName).ToList();
+        }
+
+        StateHasChanged();
+    }
+
+    private string GetImagePath(DetectedObject item)
+    {
+        if (string.IsNullOrEmpty(item.VideoName) || string.IsNullOrEmpty(item.ImageName))
+        {
+            return "";
+        }
+
+        var videoNameWithoutExtension = Path.GetFileNameWithoutExtension(item.VideoName);
+        return $"/RESULT_IMAGE/{videoNameWithoutExtension}/{item.ImageName}";
+    }
+
+    private void ShowModal(DetectedObject item)
+    {
+        selectedObject = item;
+        showModal = true;
+        StateHasChanged();
+    }
+
+    private void CloseModal()
+    {
+        showModal = false;
+        selectedObject = null;
+        StateHasChanged();
+    }
+
+    public void Dispose()
+    {
+        DbContext?.Dispose();
+    }
+}
