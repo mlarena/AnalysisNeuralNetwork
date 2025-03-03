@@ -82,3 +82,19 @@ _ReSharper*/
 # Ignore build output directories
 **/bin/
 **/obj/
+
+# Exclude specific directories
+!**/RESULT_IMAGE/
+!**/RESULT_JSON/
+!**/VIDEO_FOLDER/
+!**/TXT_FOLDER/
+!**/LOGS/
+!**/Migrations/
+
+# Include all files in the excluded directories
+!**/RESULT_IMAGE/**
+!**/RESULT_JSON/**
+!**/VIDEO_FOLDER/**
+!**/TXT_FOLDER/**
+!**/LOGS/**
+!**/Migrations/**
